@@ -1,2 +1,0 @@
-# Armani
-Aplicações Armani 
