@@ -903,34 +903,54 @@ async function runASN() {
     // 4. Merge: for each row in unificado, build triple key and lookup
     setStatus('asn', 'processing', 'Cruzando dados...');
 
-    // Extra columns: Handling unit, Tipologia, Season
-    const extraHeaders = ['Handling unit', 'Tipologia', 'Season'];
-    const finalHeader = [...allHeaders, ...extraHeaders];
+    // Extra columns: Handling unit, Tipologia, Season, PartNumber Catálogo
+    const extraHeaders = ['Handling unit', 'Tipologia', 'Season', 'PartNumber Catálogo'];
+    const finalHeader = [...allHeaders, ...extraHeaders];
 
-    const finalRows = [finalHeader];
+    const finalRows = [finalHeader];
 
-    for (const row of unificadoData) {
-      const chaveA  = getCol(row, 'A');
-      const chaveBD = getCol(row, 'BD');
-      const chaveAK = prefixOne(getColRaw(row, 'AK'));
-      const triKey  = cleanKey(chaveA + chaveBD + chaveAK);
+    // Lista de exceções para usar J+K+L
+    const excecoesPN = new Set([
+      '7W000393AF13891U4291', '7W000393AF13891MA097', '7W000393AF13891F6115',
+      '7W000393AF13891UC001', '7W000393AF13891F7001', '7W000393AF13891U6095',
+      '7W000393AF13891UA270', '7W000393AF13891MB546', '7W000393AF13891UA036',
+      '7W000393AF13891U0002', 'EW006447AF31641F1053', 'EW006447AF31641F8090',
+      'EW006447AF31641F9034', 'GM004736AF30711UB101', 'GM004736AF30711UC001',
+      'GM004824AF31002U8188'
+    ]);
 
-      const lookup  = plMap.get(triKey);
-      const hu      = lookup ? (lookup.handling_unit || 'Handling Unit não encontrado') : 'Handling Unit não encontrado';
-      const tip     = lookup ? lookup.tipologia : '';
-      const sea     = lookup ? lookup.season    : '';
+    for (const row of unificadoData) {
+      const chaveA  = getCol(row, 'A');
+      const chaveBD = getCol(row, 'BD');
+      const chaveAK = prefixOne(getColRaw(row, 'AK'));
+      const triKey  = cleanKey(chaveA + chaveBD + chaveAK);
 
-      // Pad row to allHeaders length
-      const paddedRow = [...row];
-      while (paddedRow.length < allHeaders.length) paddedRow.push('');
+      const lookup  = plMap.get(triKey);
+      const hu      = lookup ? (lookup.handling_unit || 'Handling Unit não encontrado') : 'Handling Unit não encontrado';
+      const tip     = lookup ? lookup.tipologia : '';
+      const sea     = lookup ? lookup.season    : '';
 
-      // Force BD (index 55) and BR (index 69) as text/number
-      const idxBD = col2num('BD');
-      const idxBR = col2num('BR');
-      // Keep as-is; we'll apply number format in xlsx
+      // Lógica do PartNumber Catálogo
+      const valJ = getCol(row, 'J');
+      const valK = getCol(row, 'K');
+      const valL = getCol(row, 'L');
+      
+      const concatJK = valJ + valK;
+      const concatJKL = valJ + valK + valL;
+      
+      const partNumber = excecoesPN.has(concatJKL) ? concatJKL : concatJK;
 
-      finalRows.push([...paddedRow, hu, tip, sea]);
-    }
+      // Pad row to allHeaders length
+      const paddedRow = [...row];
+      while (paddedRow.length < allHeaders.length) paddedRow.push('');
+
+      // Force BD (index 55) and BR (index 69) as text/number
+      const idxBD = col2num('BD');
+      const idxBR = col2num('BR');
+      // Keep as-is; we'll apply number format in xlsx
+
+      finalRows.push([...paddedRow, hu, tip, sea, partNumber]);
+    }
 
     // 5. Build workbook
     setStatus('asn', 'processing', 'Gerando arquivo Excel...');
