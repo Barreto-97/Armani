@@ -903,8 +903,8 @@ async function runASN() {
     // 4. Merge: for each row in unificado, build triple key and lookup
     setStatus('asn', 'processing', 'Cruzando dados...');
 
-    // Extra columns: Handling unit, Tipologia, Season, PartNumber Catálogo
-    const extraHeaders = ['Handling unit', 'Tipologia', 'Season', 'PartNumber Catálogo'];
+    // Extra columns: Handling unit, Tipologia, Season, Código Portal Único
+    const extraHeaders = ['Handling unit', 'Tipologia', 'Season', 'Código Portal Único'];
     const finalHeader = [...allHeaders, ...extraHeaders];
 
     const finalRows = [finalHeader];
@@ -930,7 +930,7 @@ async function runASN() {
       const tip     = lookup ? lookup.tipologia : '';
       const sea     = lookup ? lookup.season    : '';
 
-      // Lógica do PartNumber Catálogo
+      // Lógica do Código Portal Único
       const valJ = getCol(row, 'J');
       const valK = getCol(row, 'K');
       const valL = getCol(row, 'L');
