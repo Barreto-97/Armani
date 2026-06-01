@@ -493,12 +493,25 @@
         </div>
       </div>
 
-      <div class="field-group">
-        <label class="field-label">3 · Referência (Nome do Arquivo Final)</label>
-        <input type="text" class="text-input" id="asn-ref" placeholder="Ex: FW25 · Armani Exchange · Lote 01"/>
-      </div>
+<div class="field-group">
+        <label class="field-label">3 · Referência (Nome do Arquivo Final)</label>
+        <input type="text" class="text-input" id="asn-ref" placeholder="Ex: FW25 · Armani Exchange · Lote 01"/>
+      </div>
 
-      <button class="run-btn" id="btn-asn" onclick="runASN()">
+      <div class="field-group">
+        <label class="field-label">4 · Base Código Portal Único (Tabela Anexa)</label>
+        <div class="file-drop" id="drop-asn-base">
+          <input type="file" id="asn-base-portal" accept=".xlsx,.xls" onchange="handleFile('asn-base-portal','asn-base-portal-label')"/>
+          <span class="file-drop-icon">🗂️</span>
+          <div class="file-drop-text">
+            <div class="primary">Clique ou arraste a Tabela Anexa (Base Código)</div>
+            <div class="secondary">Arquivo com Código Interno (Col A) e Portal Único (Col B)</div>
+            <div class="filename" id="asn-base-portal-label"></div>
+          </div>
+        </div>
+      </div>
+
+      <button class="run-btn" id="btn-asn" onclick="runASN()">
         <span>▶</span> Criar ASN
       </button>
 
@@ -838,15 +851,17 @@ function toNum(val) {
 // ─────────────────────────────────────────
 
 async function runASN() {
-  const faturasInput = document.getElementById('asn-faturas');
-  const plInput     = document.getElementById('asn-pl');
-  const ref         = document.getElementById('asn-ref').value.trim();
+  const faturasInput = document.getElementById('asn-faturas');
+  const plInput     = document.getElementById('asn-pl');
+  const basePortalInput = document.getElementById('asn-base-portal');
+  const ref         = document.getElementById('asn-ref').value.trim();
 
-  if (!faturasInput.files.length) return setStatus('asn', 'warning', 'Selecione os arquivos de Faturas (ZIP ou XLSX).');
-  if (!plInput.files.length)      return setStatus('asn', 'warning', 'Selecione ao menos um arquivo PL.');
-  if (!ref)                       return setStatus('asn', 'warning', 'Digite a Referência para o arquivo final.');
+  if (!faturasInput.files.length) return setStatus('asn', 'warning', 'Selecione os arquivos de Faturas (ZIP ou XLSX).');
+  if (!plInput.files.length)      return setStatus('asn', 'warning', 'Selecione ao menos um arquivo PL.');
+  if (!ref)                       return setStatus('asn', 'warning', 'Digite a Referência para o arquivo final.');
+  if (!basePortalInput.files.length) return setStatus('asn', 'warning', 'Selecione a Tabela Anexa (Base Código Portal Único).');
 
-  setStatus('asn', 'processing', 'Carregando arquivos...');
+  setStatus('asn', 'processing', 'Carregando arquivos...');
   disableBtn('btn-asn', true);
 
   try {
@@ -883,8 +898,27 @@ async function runASN() {
       }
     }
 
-    // 2. Load all Faturas (ZIP or direct XLSX)
-    setStatus('asn', 'processing', 'Extraindo e carregando faturas...');
+// 1.5 Load Base Portal Único
+    setStatus('asn', 'processing', 'Lendo Base Código Portal Único...');
+    const portalMap = new Map();
+    if (basePortalInput.files.length > 0) {
+      const wbPortal = await readExcel(basePortalInput.files[0]);
+      const wsPortal = wbPortal.Sheets[wbPortal.SheetNames[0]];
+      const portalRows = wsToArray(wsPortal);
+      for (let i = 1; i < portalRows.length; i++) {
+        const r = portalRows[i];
+        // Ignora cabeçalhos ou linhas vazias
+        if (!r || r.length < 2 || (r[0] === '' && r[1] === '')) continue;
+        
+        const codInterno = cleanKey(r[0]); // Coluna A
+        const codPortal = String(r[1] || '').trim(); // Coluna B
+        
+        if (codInterno) portalMap.set(codInterno, codPortal);
+      }
+    }
+
+    // 2. Load all Faturas (ZIP or direct XLSX)
+    setStatus('asn', 'processing', 'Extraindo e carregando faturas...');
     const faturaDFs = await loadFaturas(Array.from(faturasInput.files));
 
     if (!Object.keys(faturaDFs).length) throw new Error('Nenhum arquivo de fatura válido encontrado.');
@@ -903,8 +937,8 @@ async function runASN() {
     // 4. Merge: for each row in unificado, build triple key and lookup
     setStatus('asn', 'processing', 'Cruzando dados...');
 
-    // Extra columns: Handling unit, Tipologia, Season, PartNumber Portal Único
-    const extraHeaders = ['Handling unit', 'Tipologia', 'Season', 'PartNumber Portal Único'];
+// Extra columns: Handling unit, Tipologia, Season, PartNumber Catálogo, Código Portal Único
+    const extraHeaders = ['Handling unit', 'Tipologia', 'Season', 'PartNumber Catálogo', 'Código Portal Único'];
     const finalHeader = [...allHeaders, ...extraHeaders];
 
     const finalRows = [finalHeader];
@@ -930,7 +964,7 @@ async function runASN() {
       const tip     = lookup ? lookup.tipologia : '';
       const sea     = lookup ? lookup.season    : '';
 
-      // Lógica do PartNumber Portal Único
+      // Lógica do PartNumber Catálogo
       const valJ = getCol(row, 'J');
       const valK = getCol(row, 'K');
       const valL = getCol(row, 'L');
@@ -939,6 +973,10 @@ async function runASN() {
       const concatJKL = valJ + valK + valL;
       
       const partNumber = excecoesPN.has(concatJKL) ? concatJKL : concatJK;
+
+      // Lógica do Código Portal Único
+      const searchKey = cleanKey(partNumber);
+      const codPortal = portalMap.has(searchKey) ? portalMap.get(searchKey) : 'Código não Encontrado';
 
       // Pad row to allHeaders length
       const paddedRow = [...row];
@@ -949,7 +987,7 @@ async function runASN() {
       const idxBR = col2num('BR');
       // Keep as-is; we'll apply number format in xlsx
 
-      finalRows.push([...paddedRow, hu, tip, sea, partNumber]);
+      finalRows.push([...paddedRow, hu, tip, sea, partNumber, codPortal]);
     }
 
     // 5. Build workbook
