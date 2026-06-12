@@ -997,15 +997,22 @@ async function runASN() {
     // Unificado sheet
     const wsUnif = XLSX.utils.aoa_to_sheet(finalRows);
 
-    // Apply numeric format to BD and BR columns (0-based idx -> 1-based col letter)
+// Apply numeric format to BD and BR columns (0-based idx -> 1-based col letter)
     const idxBD = col2num('BD');
     const idxBR = col2num('BR');
+    const idxHU = allHeaders.length; // Posição exata da coluna Handling unit
     const numFmt = '0';
+    
     for (let r = 1; r < finalRows.length; r++) {
       const cellBD = XLSX.utils.encode_cell({ r, c: idxBD });
       const cellBR = XLSX.utils.encode_cell({ r, c: idxBR });
+      const cellHU = XLSX.utils.encode_cell({ r, c: idxHU }); // Célula do Handling Unit
+
       if (wsUnif[cellBD]) { wsUnif[cellBD].t = 'n'; wsUnif[cellBD].z = numFmt; }
       if (wsUnif[cellBR]) { wsUnif[cellBR].t = 'n'; wsUnif[cellBR].z = numFmt; }
+      
+      // Força o Handling unit a ser formato TEXTO para não perder precisão dos 17+ dígitos
+      if (wsUnif[cellHU]) { wsUnif[cellHU].t = 's'; wsUnif[cellHU].z = '@'; }
     }
 
     XLSX.utils.book_append_sheet(wbOut, wsUnif, 'Unificado');
